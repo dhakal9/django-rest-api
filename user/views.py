@@ -7,8 +7,23 @@ from rest_framework.response import Response
 from .models import Blogs
 from django.contrib.auth import authenticate
 from django.contrib.auth.mixins import LoginRequiredMixin
-# Create your views here.
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
+# Create your views here.
+from rest_framework_simplejwt.tokens import RefreshToken
+
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+    }
+
+    
 class ApiOverview(APIView):
     def get(self, request):
         list_of_api={
@@ -41,14 +56,25 @@ class UserLogin(APIView):
             username = login.data.get("username")
             password = login.data.get("password")
             user = authenticate(username=username, password=password)
+            
+            
             if user is not None:
-                return Response(login.data)
+                serializer = UserSerializer(user)
+                tokens = get_tokens_for_user(user) 
+               
+                return Response(
+                   {"token":tokens, "msg":"login Success", "user_data": serializer.data}
+               )
+            
             return Response({"error": "Invalid Credentials"})
-        return Response({"success": "user login successfully" })  
+
+        return Response({"success": "user login successfully"})  
         
 
 
-class CreateBlogs(LoginRequiredMixin, APIView):
+class CreateBlogs(APIView):
+    authentication_classes =[TokenAuthentication]
+    permission_classes=[IsAuthenticated]
     def get(self, request):
         blogform = Blogs.objects.all()
         serializers = BlogSerializer(blogform, many=True)
@@ -80,4 +106,10 @@ class UpdateBlogs(LoginRequiredMixin, APIView):
         if blogform.is_valid():
             blogform.save()
             return Response(blogform.data)
-        
+
+# Using generic class-based views
+from rest_framework import generics
+
+class BlogView(generics.ListAPIView):
+    queryset = Blogs.objects.all()
+    serializer_class = BlogSerializer
